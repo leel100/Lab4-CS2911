@@ -1,0 +1,283 @@
+"""
+- CS2911 - 022
+- Fall 2018
+- Lab 4
+- Names:
+  - Joe Casper
+  - Lauren Lee
+
+A simple TCP server/client pair.
+
+The application protocol is a simple format: For each file uploaded, the client first sends four (big-endian) bytes
+ indicating the number of lines as an unsigned binary number.
+
+The client then sends each of the lines, terminated only by '\\n' (an ASCII LF byte).
+
+The server responds with 'A' if it accepts the file, and 'R' if it rejects it.
+
+Then the client can send the next file.
+"""
+
+# import the 'socket' module -- not using 'from socket import *' in order to selectively use items with 'socket.' prefix
+import socket
+import struct
+import time
+import sys
+
+# Port number definitions
+# (May have to be adjusted if they collide with ports in use by other programs/services.)
+TCP_PORT = 12100
+
+# Address to listen on when acting as server.
+# The address '' means accept any connection for our 'receive' port from any network interface
+# on this system (including 'localhost' loopback connection).
+LISTEN_ON_INTERFACE = ''
+
+# Address of the 'other' ('server') host that should be connected to for 'send' operations.
+# When connecting on one system, use 'localhost'
+# When 'sending' to another system, use its IP address (or DNS name if it has one)
+# OTHER_HOST = '155.92.x.x'
+OTHER_HOST = 'localhost'
+
+
+def main():
+    """
+    Allows user to either send or receive bytes
+    """
+    # Get chosen operation from the user.
+    action = input('Select "(1-TS) tcpsend", or "(2-TR) tcpreceive":')
+    # Execute the chosen operation.
+    if action in ['1', 'TS', 'ts', 'tcpsend']:
+        tcp_send(OTHER_HOST, TCP_PORT)
+    elif action in ['2', 'TR', 'tr', 'tcpreceive']:
+        tcp_receive(TCP_PORT)
+    else:
+        print('Unknown action: "{0}"'.format(action))
+
+
+def tcp_send(server_host, server_port):
+    """
+    - Send multiple messages over a TCP connection to a designated host/port
+    - Receive a one-character response from the 'server'
+    - Print the received response
+    - Close the socket
+    
+    :param str server_host: name of the server host machine
+    :param int server_port: port number on server to send to
+    """
+    print('tcp_send: dst_host="{0}", dst_port={1}'.format(server_host, server_port))
+    tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp_socket.connect((server_host, server_port))
+
+    num_lines = int(input('Enter the number of lines you want to send (0 to exit):'))
+
+    while num_lines != 0:
+        print('Now enter all the lines of your message')
+        # This client code does not completely conform to the specification.
+        #
+        # In it, I only pack one byte of the range, limiting the number of lines this
+        # client can send.
+        #
+        # While writing tcp_receive, you will need to use a different approach to unpack to meet the specification.
+        #
+        # Feel free to upgrade this code to handle a higher number of lines, too.
+        tcp_socket.sendall(b'\x00\x00')
+        time.sleep(1)  # Just to mess with your servers. :-)
+        tcp_socket.sendall(b'\x00' + bytes((num_lines,)))
+
+        # Enter the lines of the message. Each line will be sent as it is entered.
+        for line_num in range(0, num_lines):
+            line = input('')
+            tcp_socket.sendall(line.encode() + b'\n')
+
+        print('Done sending. Awaiting reply.')
+        response = tcp_socket.recv(1)
+        if response == b'A':  # Note: == in Python is like .equals in Java
+            print('File accepted.')
+        else:
+            print('Unexpected response:', response)
+
+        num_lines = int(input('Enter the number of lines you want to send (0 to exit):'))
+
+    tcp_socket.sendall(b'\x00\x00')
+    time.sleep(1)  # Just to mess with your servers. :-)  Your code should work with this line here.
+    tcp_socket.sendall(b'\x00\x00')
+    response = tcp_socket.recv(1)
+    if response == b'Q':  # Reminder: == in Python is like .equals in Java
+        print('Server closing connection, as expected.')
+    else:
+        print('Unexpected response:', response)
+
+    tcp_socket.close()
+
+
+# TODO TCP Server code
+def tcp_receive(listen_port):
+    """
+    - Listen for a TCP connection on a designated "listening" port
+    - Accept the connection, creating a connection socket
+    - Print the address and port of the sender
+    - Repeat until a zero-length message is received:
+      - Receive a message, saving it to a text-file (1.txt for first file, 2.txt for second file, etc.)
+      - Send a single-character response 'A' to indicate that the upload was accepted.
+    - Send a 'Q' to indicate a zero-length message was received.
+    - Close data connection.
+   
+    :param int listen_port: Port number on the server to listen on
+    """
+
+    print('tcp_receive (server): listen_port={0}'.format(listen_port))
+
+    listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listen_socket.bind(('', listen_port))
+    listen_socket.listen(1)
+    data_socket, sender_address = listen_socket.accept()
+
+    # message_over is true when the message length == 0
+    message_over = False
+
+    # decode the message while there still is a message to read
+    while not message_over:
+        # decode_bytes returns true when the message length == 0
+        message_over = decode_bytes(data_socket)
+        # Send an "a" to tell the sender that the file was received
+        data_socket.sendall(b'\x41')
+
+    data_socket.sendall(b'\x51')
+    # use when you want to send data -- data_socket.sendall(response_data)
+    data_socket.close()
+    listen_socket.close()
+
+
+def decode_bytes(data_socket):
+    """
+    Program reads in a message made of hexadecimal bytes, parses them to
+    readable English and then saves the decoded message to a file
+    :author: Joe Casper and Lauren Lee
+    """
+
+    # get the message length
+    msg_length = get_message_length(data_socket)
+
+    # If the message length is 0, the message is over, so return true
+    if msg_length == 0:
+        return True
+
+    # create the blank array
+    blank_array = create_message_array(msg_length)
+
+    # read through the encoded message, store the decoded values in an array
+    decoded_msg = read_message(msg_length, blank_array, data_socket)
+
+    # save the message to a file
+    save_to_file(decoded_msg)
+
+    # returns false as the message length > 0 and there may be more to read
+    return False
+
+
+def get_message_length(data_socket):
+    """
+    This method reads the first 4 bytes of the encoded message and saves it as the message length
+    :param data_socket -- the byte reader
+    :return: the number of lines in the message
+    :author: Joe Casper and Lauren Lee
+    """
+    length = b''
+
+    # reads the first 4 bytes of the message and appends it to a bytes object
+    for counter in range(0, 4):
+        length += next_byte(data_socket)
+
+    # converts the bytes object to an int, returns the result
+    return int.from_bytes(length, "big")
+
+
+def create_message_array(size):
+    """
+    This method creates a two dimensional array that stores the message.
+    The number of arrays in the message array equals the number of lines in the encoded message
+    :return: a 2d message array
+    :author: Joe Casper
+    """
+
+    array = []
+
+    # for each line long the message is, add one index of arrays to array
+    for x in range(0, size):
+        array.append([])
+
+    return array
+
+
+def read_message(size, array, data_socket):
+    """
+    Holds a loop that reads the encoded message line by line. This method redirects to the
+    read_lines method, where the message is decoded
+    :return: the completed, decoded message stored in an array
+    :author: Joe Casper
+    """
+    # Run this line of code for every '/n' in the encoded message
+    for counter in range(0, size):
+        read_line(array, counter, data_socket)
+
+    return array
+
+
+def read_line(array, index, data_socket):
+    """
+    Reads a line, byte by byte, until a newline character is found. Each byte is decoded as
+    the line is iterated through.
+    :author: Joe Casper
+    """
+    # continue_parsing is marked as false when next_byte returns a newline character
+    continue_parsing = True
+    while continue_parsing:
+        byte = b''
+        # append the next byte in the message to a blank bytes object
+        byte += next_byte(data_socket)
+
+        # At the current index, decode the bytes object and append it
+        array[index].append(byte.decode("ASCII"))
+
+        # if next_byte returned a newline character, break the loop and return to read_message
+        if byte == b'\x0a':
+            continue_parsing = False
+
+
+def save_to_file(decoded_msg):
+    """
+    Saves the newly decoded message in a file
+    :param decoded_msg the decoded message
+    :author: Lauren Lee
+    """
+    with open('File', 'wb') as output_file:
+        # saves data that sends to the file
+        # output_file.write(b'Message is: ' + decoded_msg)
+        for decode in decoded_msg:
+            for decode1 in decode:
+                output_file.write(decode1.encode())
+
+
+# Add more methods here (Delete this line)
+
+
+def next_byte(data_socket):
+    """
+    Read the next byte from the socket data_socket.
+   
+    Read the next byte from the sender, received over the network.
+    If the byte has not yet arrived, this method blocks (waits)
+      until the byte arrives.
+    If the sender is done sending and is waiting for your response, this method blocks indefinitely.
+   
+    :param data_socket: The socket to read from. The data_socket argument should be an open tcp
+                        data connection (either a client socket or a server data socket), not a tcp
+                        server's listening socket.
+    :return: the next byte, as a bytes object with a single byte in it
+    """
+    return data_socket.recv(1)
+
+
+# Invoke the main method to run the program.
+main()
