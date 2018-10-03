@@ -111,7 +111,6 @@ def tcp_send(server_host, server_port):
     tcp_socket.close()
 
 
-# TODO TCP Server code
 def tcp_receive(listen_port):
     """
     - Listen for a TCP connection on a designated "listening" port
@@ -123,7 +122,8 @@ def tcp_receive(listen_port):
     - Send a 'Q' to indicate a zero-length message was received.
     - Close data connection.
 
-    :param int listen_port: Port number on the server to listen on
+    :param: int listen_port: Port number on the server to listen on
+    :author: Joe Casper and Lauren Lee
     """
 
     print('tcp_receive (server): listen_port={0}'.format(listen_port))
@@ -135,37 +135,36 @@ def tcp_receive(listen_port):
 
     # message_over is true when the message length == 0
     message_over = False
+    file_number = 0
 
     # decode the message while there still is a message to read
+    # Not sure how to write this loop without a do-while
     while not message_over:
-        # decode_bytes returns true when the message length == 0
-        message_over = decode_bytes(data_socket)
-        if not message_over :
-            # Send an "a" to tell the sender that the file was received
-            data_socket.sendall(b'A')
-        else :
-            data_socket.sendall(b'Q')
 
-    data_socket.sendall(b'\x51')
-    # use when you want to send data -- data_socket.sendall(response_data)
+        msg_length = get_message_length(data_socket)
+
+        if msg_length > 0:
+            # Send an "A" to tell the sender that the file was received
+            data_socket.sendall(b'A')
+            file_number = decode_bytes(data_socket, file_number, msg_length)
+        else:
+            message_over = True
+
+    data_socket.sendall(b'Q')
     data_socket.close()
     listen_socket.close()
 
 
-
-def decode_bytes(data_socket):
+def decode_bytes(data_socket, file_number, msg_length):
     """
     Program reads in a message made of hexadecimal bytes, parses them to
     readable English and then saves the decoded message to a file
+    :param: data_socket: holds the data the next_byte uses
+    :param: int file_number: holds the number of the file that is being saved
+    :param: msg_length: the number of lines in the message
+    :return: returns the current file number
     :author: Joe Casper and Lauren Lee
     """
-
-    # get the message length
-    msg_length = get_message_length(data_socket)
-
-    # If the message length is 0, the message is over, so return true
-    if msg_length == 0:
-        return True
 
     # create the blank array
     blank_array = create_message_array(msg_length)
@@ -173,17 +172,15 @@ def decode_bytes(data_socket):
     # read through the encoded message, store the decoded values in an array
     decoded_msg = read_message(msg_length, blank_array, data_socket)
 
-    # save the message to a file
-    save_to_file(decoded_msg)
-
-    # returns false as the message length > 0 and there may be more to read
-    return False
+    # save the message to a file, returns the number of the file
+    return save_to_file(decoded_msg, file_number)
 
 
 def get_message_length(data_socket):
     """
-    This method reads the first 4 bytes of the encoded message and saves it as the message length
-    :param data_socket -- the byte reader
+    This method reads the first 4 bytes of the encoded
+    message and saves it as the message length
+    :param: data_socket -- the byte reader
     :return: the number of lines in the message
     :author: Joe Casper and Lauren Lee
     """
@@ -200,8 +197,10 @@ def get_message_length(data_socket):
 def create_message_array(size):
     """
     This method creates a two dimensional array that stores the message.
-    The number of arrays in the message array equals the number of lines in the encoded message
+    The number of arrays in the message array equals the number
+    of lines in the encoded message
     :return: a 2d message array
+    :param: size: the number of lines in the message
     :author: Joe Casper
     """
 
@@ -213,15 +212,16 @@ def create_message_array(size):
 
     return array
 
-#TODO NEED TO FIX PYTHON DOC
+
 def read_message(size, array, data_socket):
     """
-    Holds a loop that reads the encoded message line by line. This method redirects to the
+    Holds a loop that reads the encoded message line by line.
+    This method redirects to the
     read_lines method, where the message is decoded
     :return: the completed, decoded message stored in an array
-    :(FIX)TODO : data_socket redirects where the the decoded message should go to
-    :(FIX)TODO : array keeps track on where it loops next
-    :(FIX)TODO: size keeps try of the size of the array
+    :param: data_socket: holds the data for next_byte
+    :param: array: The message, which is held in this array
+    :param: size: number of lines in the message
     :author: Joe Casper
     """
     # Run this line of code for every '/n' in the encoded message
@@ -230,43 +230,46 @@ def read_message(size, array, data_socket):
 
     return array
 
-#TODO: NEED TO FIX PYTHON DOC 
+
 def read_line(array, index, data_socket):
     """
     Reads a line, byte by byte, until a newline character is found. Each byte is decoded as
     the line is iterated through.
+    :param: array: array that hold the message
+    :param: index: the current line being written
+    :param: data_socket: holds the data for next_byte
     :author: Joe Casper
     """
     # continue_parsing is marked as false when next_byte returns a newline character
-    continue_parsing = True
-    while continue_parsing:
-        byte = b''
-        # append the next byte in the message to a blank bytes object
-        byte += next_byte(data_socket)
+    byte = b''
+    while byte != b'\x0a':
+        # store the next byte in the message in a blank bytes object
+        byte = next_byte(data_socket)
 
         # At the current index, decode the bytes object and append it
         array[index].append(byte.decode("ASCII"))
 
-        # if next_byte returned a newline character, break the loop and return to read_message
-        if byte == b'\x0a':
-            continue_parsing = False
 
-
-def save_to_file(decoded_msg):
+def save_to_file(decoded_msg, file_number):
     """
     Saves the newly decoded message in a file
-    :param decoded_msg the decoded message
-    :author: Lauren Lee
+    :param: decoded_msg: the decoded message
+    :param: file_number: keeps track of how many files have been written
+    :return: file_number: Holds the current file number so that the next file's
+        number gets incremented
+    :author: Lauren Lee and Joe Casper
     """
-    with open('File', 'wb') as output_file:
+    file_number += 1
+
+    with open(str(file_number), 'wb') as output_file:
         # saves data that sends to the file
         # output_file.write(b'Message is: ' + decoded_msg)
         for decode in decoded_msg:
             for decode1 in decode:
                 output_file.write(decode1.encode())
 
-
-# Add more methods here (Delete this line)
+    # increment file number by one so that the next file has the correct name
+    return file_number
 
 
 def next_byte(data_socket):
@@ -282,9 +285,11 @@ def next_byte(data_socket):
                         data connection (either a client socket or a server data socket), not a tcp
                         server's listening socket.
     :return: the next byte, as a bytes object with a single byte in it
+    :author: Joe Casper
     """
     return data_socket.recv(1)
 
 
 # Invoke the main method to run the program.
 main()
+
