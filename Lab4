@@ -45,7 +45,7 @@ def main():
     Allows user to either send or receive bytes
     """
     # Get chosen operation from the user.
-    action = input('Select "(1-TS) tcpsend", or "(2-TR) tcpreceive":')
+    action = input('Select "(1-TS) tcpsend", or "(2-TR) tcpreceive": ')
     # Execute the chosen operation.
     if action in ['1', 'TS', 'ts', 'tcpsend']:
         tcp_send(OTHER_HOST, TCP_PORT)
@@ -69,7 +69,7 @@ def tcp_send(server_host, server_port):
     tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcp_socket.connect((server_host, server_port))
 
-    num_lines = int(input('Enter the number of lines you want to send (0 to exit):'))
+    num_lines = int(input('Enter the number of lines you want to send (0 to exit): '))
 
     while num_lines != 0:
         print('Now enter all the lines of your message')
@@ -97,7 +97,7 @@ def tcp_send(server_host, server_port):
         else:
             print('Unexpected response:', response)
 
-        num_lines = int(input('Enter the number of lines you want to send (0 to exit):'))
+        num_lines = int(input('Enter the number of lines you want to send (0 to exit): '))
 
     tcp_socket.sendall(b'\x00\x00')
     time.sleep(1)  # Just to mess with your servers. :-)  Your code should work with this line here.
@@ -213,12 +213,15 @@ def create_message_array(size):
 
     return array
 
-
+#TODO NEED TO FIX PYTHON DOC
 def read_message(size, array, data_socket):
     """
     Holds a loop that reads the encoded message line by line. This method redirects to the
     read_lines method, where the message is decoded
     :return: the completed, decoded message stored in an array
+    :(FIX)TODO : data_socket redirects where the the decoded message should go to
+    :(FIX)TODO : array keeps track on where it loops next
+    :(FIX)TODO: size keeps try of the size of the array
     :author: Joe Casper
     """
     # Run this line of code for every '/n' in the encoded message
@@ -227,7 +230,7 @@ def read_message(size, array, data_socket):
 
     return array
 
-
+#TODO: NEED TO FIX PYTHON DOC 
 def read_line(array, index, data_socket):
     """
     Reads a line, byte by byte, until a newline character is found. Each byte is decoded as
